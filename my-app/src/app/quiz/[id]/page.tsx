@@ -1,27 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { roadmapItems, type Question } from "@/lib/data";
+import { type Question } from "@/lib/data";
+
+interface QuizData {
+  roadmap_item_id: number;
+  questions: Question[];
+}
 
 export default function QuizPage() {
   const params = useParams();
   const id = params.id as string;
 
-  const item = roadmapItems.find(it => it.id === id);
-  const questions: Question[] = item?.questions || [];
-
+  const [quizData, setQuizData] = useState<QuizData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
 
-  if (!item) {
+  useEffect(() => {
+    fetch(`http://localhost:8000/api/quiz/${id}`)
+      .then(res => {
+        if (!res.ok) {
+          throw new Error('Quiz not found');
+        }
+        return res.json();
+      })
+      .then(data => {
+        setQuizData(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <p>Loading quiz...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error || !quizData) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -29,7 +64,7 @@ export default function QuizPage() {
             <CardTitle>Quiz Not Found</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-4">The quiz for this topic is not available.</p>
+            <p className="mb-4">{error || 'The quiz for this topic is not available.'}</p>
             <Link href="/roadmap">
               <Button>Back to Study</Button>
             </Link>
@@ -38,6 +73,8 @@ export default function QuizPage() {
       </div>
     );
   }
+
+  const questions = quizData?.questions || [];
 
   const handleAnswerSelect = (index: number) => {
     setSelectedAnswer(index);
@@ -119,7 +156,7 @@ export default function QuizPage() {
       <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle className="text-xl font-semibold text-gray-800">
-            {item.title} | Question {currentQuestion + 1} of {questions.length}
+            Quiz | Question {currentQuestion + 1} of {questions.length}
           </CardTitle>
         </CardHeader>
         <CardContent>
