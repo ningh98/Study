@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from google import genai
 import json
+import hashlib
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app import models, db
 from dotenv import load_dotenv
 import os
@@ -14,6 +15,9 @@ load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 router = APIRouter(prefix="/api/knowledge-graph")
+
+# Minimum weight threshold for relationships
+MIN_RELATIONSHIP_WEIGHT = 1.5  # Only include moderate to strong connections
 
 class Node(BaseModel):
     id: str
@@ -32,10 +36,28 @@ class KnowledgeGraphResponse(BaseModel):
     nodes: List[Node]
     edges: List[Edge]
 
+def compute_data_hash(roadmaps: List[models.Roadmap], roadmap_items: List[models.RoadmapItem]) -> str:
+    """Compute a hash of the current roadmap data to detect changes."""
+    data_string = ""
+    
+    # Include roadmap data
+    for roadmap in sorted(roadmaps, key=lambda x: x.id):
+        data_string += f"r{roadmap.id}|{roadmap.topic}|{roadmap.experience}|"
+    
+    # Include roadmap items data
+    for item in sorted(roadmap_items, key=lambda x: x.id):
+        data_string += f"i{item.id}|{item.roadmap_id}|{item.title}|{item.summary}|"
+    
+    return hashlib.sha256(data_string.encode()).hexdigest()
+
 @router.get("/", response_model=KnowledgeGraphResponse)
-async def get_knowledge_graph(db_conn: Session = Depends(db.get_db)):
+async def get_knowledge_graph(
+    force_refresh: bool = Query(False, description="Force regeneration ignoring cache"),
+    db_conn: Session = Depends(db.get_db)
+):
     """
     Generate knowledge graph data showing relationships between topics and titles.
+    Uses intelligent caching to avoid unnecessary LLM calls.
     Returns nodes (topics/titles) and edges (connections) for visualization.
     """
 
@@ -46,6 +68,23 @@ async def get_knowledge_graph(db_conn: Session = Depends(db.get_db)):
 
         if not roadmaps:
             return {"nodes": [], "edges": []}
+        
+        # Compute hash of current data
+        current_hash = compute_data_hash(roadmaps, roadmap_items)
+        
+        # Check if we have a valid cache (unless force refresh is requested)
+        if not force_refresh:
+            cached = db_conn.query(models.KnowledgeGraphCache).filter(
+                models.KnowledgeGraphCache.data_hash == current_hash
+            ).first()
+            
+            if cached:
+                # Return cached data
+                graph_data = json.loads(cached.graph_data)
+                print(f"✓ Returning cached knowledge graph (hash: {current_hash[:8]}...)")
+                return graph_data
+        
+        print(f"⚙ Generating new knowledge graph (hash: {current_hash[:8]}...)")
 
         # Prepare content for AI analysis
         content_map = {}
@@ -109,7 +148,32 @@ async def get_knowledge_graph(db_conn: Session = Depends(db.get_db)):
                 if (edge.source, edge.target) not in existing_edges:
                     edges.append(edge)
 
-        return {"nodes": nodes, "edges": edges}
+        result = {"nodes": nodes, "edges": edges}
+        
+        # Cache the result
+        try:
+            # Delete old cache entries (keep only the latest)
+            db_conn.query(models.KnowledgeGraphCache).delete()
+            
+            # Convert Pydantic models to dict for JSON serialization
+            serializable_result = {
+                "nodes": [node.model_dump() for node in nodes],
+                "edges": [edge.model_dump() for edge in edges]
+            }
+            
+            # Create new cache entry
+            cache_entry = models.KnowledgeGraphCache(
+                data_hash=current_hash,
+                graph_data=json.dumps(serializable_result)
+            )
+            db_conn.add(cache_entry)
+            db_conn.commit()
+            print(f"✓ Cached new knowledge graph")
+        except Exception as cache_error:
+            print(f"Warning: Failed to cache knowledge graph: {str(cache_error)}")
+            db_conn.rollback()
+        
+        return result
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate knowledge graph: {str(e)}")
@@ -144,6 +208,9 @@ async def analyze_relationships(title_nodes: List[Node]) -> List[Edge]:
         2. Look for complementary relationships (topics that build upon each other)
         3. Look for conceptual connections (sharing similar concepts or techniques)
         4. Consider cross-domain knowledge transfer (e.g., math concepts in programming)
+        5. BE HIGHLY SELECTIVE - Only create connections that are truly meaningful
+        6. Avoid weak or superficial connections - better to have fewer high-quality relationships
+        7. Minimum weight should be 1.5 or higher for any relationship
 
         Return ONLY valid JSON with this exact structure:
         {{
@@ -195,16 +262,22 @@ async def analyze_relationships(title_nodes: List[Node]) -> List[Edge]:
 
         relationships_data = response.parsed
 
-        # Convert to Edge objects
+        # Convert to Edge objects, filtering out weak connections
         edges = []
         for rel in relationships_data["relationships"]:
-            edges.append(Edge(
-                source=rel["source_id"],
-                target=rel["target_id"],
-                weight=float(rel["weight"]),
-                relationship=rel["relationship_type"]
-            ))
+            weight = float(rel["weight"])
+            # Only include relationships that meet minimum weight threshold
+            if weight >= MIN_RELATIONSHIP_WEIGHT:
+                edges.append(Edge(
+                    source=rel["source_id"],
+                    target=rel["target_id"],
+                    weight=weight,
+                    relationship=rel["relationship_type"]
+                ))
+            else:
+                print(f"Filtered out weak connection: {rel['source_id']} -> {rel['target_id']} (weight: {weight})")
 
+        print(f"✓ Generated {len(edges)} high-quality relationships")
         return edges
 
     except Exception as e:

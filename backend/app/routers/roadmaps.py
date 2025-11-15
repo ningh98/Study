@@ -90,6 +90,9 @@ async def generate_roadmap(request: schema.RoadmapCreate, db_conn: Session = Dep
     db_conn.commit()
     db_conn.refresh(db_roadmap)
     
+    # Invalidate knowledge graph cache since we're adding new data
+    db_conn.query(models.KnowledgeGraphCache).delete()
+    
     for item_data in roadmap_data["items"]:
         # Create roadmap item
         db_item = models.RoadmapItem(
@@ -182,6 +185,9 @@ async def delete_roadmap(roadmap_id: int, db_conn: Session = Depends(db.get_db))
         
         # Delete the roadmap itself
         db_conn.delete(roadmap)
+        
+        # Invalidate knowledge graph cache since we're removing data
+        db_conn.query(models.KnowledgeGraphCache).delete()
         
         # Commit all changes
         db_conn.commit()

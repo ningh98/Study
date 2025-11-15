@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, Text
+from sqlalchemy import Column, Integer, String, Boolean, Float, Text, DateTime
 from sqlalchemy.orm import declarative_base
+from datetime import datetime
 
 Base = declarative_base()
 
@@ -30,3 +31,12 @@ class QuizQuestion(Base):
     question = Column(Text)
     options = Column(String)  # JSON string
     correct = Column(Integer)
+
+class KnowledgeGraphCache(Base):
+    __tablename__ = "knowledge_graph_cache"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    data_hash = Column(String, unique=True, index=True)  # Hash of source data
+    graph_data = Column(Text)  # JSON string of nodes and edges
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
