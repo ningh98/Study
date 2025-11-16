@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { API_ENDPOINTS } from "@/lib/api";
 
 import {
   Dialog,
@@ -41,7 +42,7 @@ const RoadmapPage = () => {
 
   useEffect(() => {
     // Fetch roadmaps
-    fetch('http://localhost:8000/api/roadmaps/')
+    fetch(API_ENDPOINTS.roadmaps.base)
       .then(res => res.json())
       .then(data => {
         // Sort roadmaps by ID in descending order (newest first)
@@ -51,7 +52,7 @@ const RoadmapPage = () => {
       });
 
     // Fetch progress/unlocked items
-    fetch('http://localhost:8000/api/progress/unlocked?user_id=default_user')
+    fetch(API_ENDPOINTS.progress.unlocked())
       .then(res => res.json())
       .then(data => {
         setCompletedIds(new Set(data.unlocked_ids));
@@ -97,7 +98,7 @@ const RoadmapPage = () => {
     }
     
     try {
-      const response = await fetch(`http://localhost:8000/api/roadmaps/${roadmapId}`, {
+      const response = await fetch(API_ENDPOINTS.roadmaps.delete(roadmapId.toString()), {
         method: 'DELETE',
       });
       
@@ -139,7 +140,7 @@ const RoadmapPage = () => {
           <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <Compass className="w-6 h-6 text-cyan-600" />
             <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              LearnVoyage
+              Compass
             </h1>
           </Link>
           <div className="flex gap-3">

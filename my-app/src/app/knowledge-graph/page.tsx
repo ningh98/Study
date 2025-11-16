@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Compass, Telescope, Map as MapIcon, Anchor, Sparkles } from "lucide-react";
+import { API_ENDPOINTS } from "@/lib/api";
 
 interface Node {
   id: string;
@@ -48,7 +49,7 @@ const KnowledgeGraphPage = () => {
         setLoading(true);
 
         // Fetch graph data
-        const graphResponse = await fetch('http://localhost:8000/api/knowledge-graph/');
+        const graphResponse = await fetch(API_ENDPOINTS.knowledgeGraph);
         if (!graphResponse.ok) {
           throw new Error(`HTTP error! status: ${graphResponse.status}`);
         }
@@ -56,7 +57,7 @@ const KnowledgeGraphPage = () => {
         setGraphData(graphData);
 
         // Fetch unlocked progress
-        const progressResponse = await fetch('http://localhost:8000/api/progress/unlocked?user_id=default_user');
+        const progressResponse = await fetch(API_ENDPOINTS.progress.unlocked());
         if (progressResponse.ok) {
           const progressData = await progressResponse.json();
           setUnlockedIds(new Set(progressData.unlocked_ids));
@@ -122,7 +123,7 @@ const KnowledgeGraphPage = () => {
           <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <Compass className="w-6 h-6 text-cyan-600" />
             <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              LearnVoyage
+              Compass
             </h1>
           </Link>
           <div className="flex gap-3">

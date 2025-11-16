@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { X, Sparkles, Compass, Map, Eye, EyeOff } from "lucide-react";
+import { API_ENDPOINTS } from "@/lib/api";
 
 interface TurtleState {
   total_unlocks: number;
@@ -39,7 +40,7 @@ export default function TurtleGuide() {
   // Fetch turtle state
   const fetchTurtleState = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/progress/turtle-state?user_id=default_user');
+      const response = await fetch(API_ENDPOINTS.progress.turtleState());
       if (response.ok) {
         const data = await response.json();
         setTurtleState(data);
@@ -67,7 +68,7 @@ export default function TurtleGuide() {
   const triggerDiscovery = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/roadmaps/discover?user_id=default_user', {
+      const response = await fetch(API_ENDPOINTS.roadmaps.discover(), {
         method: 'POST',
       });
       
@@ -78,7 +79,7 @@ export default function TurtleGuide() {
         setMinimized(false);
 
         // Mark discovery as shown
-        await fetch('http://localhost:8000/api/progress/mark-discovery-shown?user_id=default_user', {
+        await fetch(API_ENDPOINTS.progress.markDiscoveryShown(), {
           method: 'POST',
         });
       }
@@ -94,7 +95,7 @@ export default function TurtleGuide() {
     setLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:8000/api/roadmaps/accept-suggestion?topic=${encodeURIComponent(topic)}&experience=Beginner&user_id=default_user`,
+        API_ENDPOINTS.roadmaps.acceptSuggestion(topic),
         { method: 'POST' }
       );
       
@@ -118,7 +119,7 @@ export default function TurtleGuide() {
     
     const newVisibility = !turtleState.turtle_visible;
     try {
-      await fetch('http://localhost:8000/api/progress/turtle-visibility', {
+      await fetch(API_ENDPOINTS.progress.turtleVisibility, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

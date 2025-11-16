@@ -11,6 +11,7 @@ import {
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_ENDPOINTS } from "@/lib/api";
 
 export default function Home() {
   const [topic, setTopic] = useState('');
@@ -25,7 +26,7 @@ export default function Home() {
     setError(null);
     
     try {
-      const response = await fetch('http://localhost:8000/api/roadmaps/generate', {
+      const response = await fetch(API_ENDPOINTS.roadmaps.generate, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, experience })
@@ -145,7 +146,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Compass className="w-6 h-6 text-cyan-600" />
             <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-              LearnVoyage
+              Compass
             </h1>
           </div>
           <div className="flex gap-3">

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { API_ENDPOINTS } from "@/lib/api";
 
 import { type Question } from "@/lib/data";
 
@@ -44,7 +45,7 @@ export default function QuizPage() {
   const [showUnlockModal, setShowUnlockModal] = useState(false);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/quiz/${id}`)
+    fetch(API_ENDPOINTS.quiz.get(id))
       .then(res => {
         if (!res.ok) {
           throw new Error('Quiz not found');
@@ -69,7 +70,7 @@ export default function QuizPage() {
 
       if (isPerfectScore) {
         // Save completion to backend
-        fetch('http://localhost:8000/api/progress/complete', {
+        fetch(API_ENDPOINTS.progress.complete, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -93,7 +94,7 @@ export default function QuizPage() {
               }
 
               // Fetch item title for modal
-              fetch('http://localhost:8000/api/roadmaps/')
+              fetch(API_ENDPOINTS.roadmaps.base)
                 .then(res => res.json())
                 .then((roadmaps: any[]) => {
                   const item = roadmaps.flatMap((r: any) => r.items).find((item: any) => item.id === parseInt(id));
