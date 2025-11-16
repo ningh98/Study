@@ -61,3 +61,14 @@ class QuizProgress(Base):
     completed_at = Column(DateTime, default=datetime.utcnow)
     score = Column(Integer)
     total_questions = Column(Integer)
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+    
+    user_id = Column(String, primary_key=True, index=True)
+    total_unlocks = Column(Integer, default=0)
+    turtle_phase = Column(Integer, default=0)  # 0=hidden, 1-3=progression phases
+    turtle_visible = Column(Boolean, default=True)  # user preference to show/hide
+    last_discovery_at = Column(Integer, default=0)  # unlock count when last discovery was shown
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app import models, db
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 router = APIRouter(prefix="/api/progress")
@@ -20,6 +20,42 @@ class RoadmapProgressResponse(BaseModel):
     completed_levels: List[int]
     current_level: int
     completed_item_ids: List[int]
+
+class TurtleStateResponse(BaseModel):
+    total_unlocks: int
+    turtle_phase: int
+    should_show_discovery: bool
+    turtle_visible: bool
+    unlocks_until_next_discovery: int
+
+class UpdateTurtleVisibilityRequest(BaseModel):
+    turtle_visible: bool
+    user_id: str = "default_user"
+
+def get_or_create_user_profile(user_id: str, db_conn: Session) -> models.UserProfile:
+    """Get or create user profile for tracking turtle state."""
+    profile = db_conn.query(models.UserProfile).filter(
+        models.UserProfile.user_id == user_id
+    ).first()
+    
+    if not profile:
+        profile = models.UserProfile(user_id=user_id)
+        db_conn.add(profile)
+        db_conn.commit()
+        db_conn.refresh(profile)
+    
+    return profile
+
+def calculate_turtle_phase(total_unlocks: int) -> int:
+    """Calculate turtle progression phase based on unlock count."""
+    if total_unlocks < 3:
+        return 0  # Hidden
+    elif total_unlocks < 9:
+        return 1  # Phase 1: Shy peeking
+    elif total_unlocks < 21:
+        return 2  # Phase 2: More visible
+    else:
+        return 3  # Phase 3: Full reveal
 
 @router.post("/complete")
 async def complete_quiz(
@@ -78,6 +114,12 @@ async def complete_quiz(
             completed_at=datetime.utcnow()
         )
         db_conn.add(progress)
+        
+        # Update user profile unlock count
+        profile = get_or_create_user_profile(request.user_id, db_conn)
+        profile.total_unlocks += 1
+        profile.turtle_phase = calculate_turtle_phase(profile.total_unlocks)
+        profile.updated_at = datetime.utcnow()
 
     db_conn.commit()
 
@@ -184,4 +226,100 @@ async def get_roadmap_progress(
         "completed_levels": completed_levels,
         "current_level": current_level,
         "completed_item_ids": completed_in_roadmap
+    }
+
+@router.get("/turtle-state", response_model=TurtleStateResponse)
+async def get_turtle_state(
+    user_id: str = "default_user",
+    db_conn: Session = Depends(db.get_db)
+):
+    """
+    Get turtle guide state for the user.
+    
+    Query parameters:
+    - user_id: User identifier (defaults to "default_user")
+    
+    Returns:
+    - total_unlocks: Total number of topics unlocked
+    - turtle_phase: Current progression phase (0-3)
+    - should_show_discovery: Whether discovery modal should be shown
+    - turtle_visible: User preference for showing turtle
+    - unlocks_until_next_discovery: Count until next discovery trigger
+    """
+    profile = get_or_create_user_profile(user_id, db_conn)
+    
+    # Check if discovery should be triggered
+    # Trigger every 3 unlocks AND not shown at this count before
+    should_show_discovery = (
+        profile.total_unlocks >= 3 and 
+        profile.total_unlocks % 3 == 0 and
+        profile.last_discovery_at < profile.total_unlocks
+    )
+    
+    # Calculate unlocks until next discovery
+    if profile.total_unlocks < 3:
+        unlocks_until_next = 3 - profile.total_unlocks
+    else:
+        unlocks_until_next = 3 - (profile.total_unlocks % 3)
+        if unlocks_until_next == 3:
+            unlocks_until_next = 0
+    
+    return {
+        "total_unlocks": profile.total_unlocks,
+        "turtle_phase": profile.turtle_phase,
+        "should_show_discovery": should_show_discovery,
+        "turtle_visible": profile.turtle_visible,
+        "unlocks_until_next_discovery": unlocks_until_next
+    }
+
+@router.post("/turtle-visibility")
+async def update_turtle_visibility(
+    request: UpdateTurtleVisibilityRequest,
+    db_conn: Session = Depends(db.get_db)
+):
+    """
+    Update user preference for turtle guide visibility.
+    
+    Body parameters:
+    - turtle_visible: Boolean to show/hide turtle
+    - user_id: User identifier (defaults to "default_user")
+    
+    Returns:
+    - Success message with updated state
+    """
+    profile = get_or_create_user_profile(request.user_id, db_conn)
+    profile.turtle_visible = request.turtle_visible
+    profile.updated_at = datetime.utcnow()
+    db_conn.commit()
+    
+    return {
+        "success": True,
+        "message": f"Turtle guide {'shown' if request.turtle_visible else 'hidden'}",
+        "turtle_visible": profile.turtle_visible
+    }
+
+@router.post("/mark-discovery-shown")
+async def mark_discovery_shown(
+    user_id: str = "default_user",
+    db_conn: Session = Depends(db.get_db)
+):
+    """
+    Mark that discovery modal was shown at current unlock count.
+    This prevents showing it again until the next milestone.
+    
+    Query parameters:
+    - user_id: User identifier (defaults to "default_user")
+    
+    Returns:
+    - Success message
+    """
+    profile = get_or_create_user_profile(user_id, db_conn)
+    profile.last_discovery_at = profile.total_unlocks
+    profile.updated_at = datetime.utcnow()
+    db_conn.commit()
+    
+    return {
+        "success": True,
+        "message": "Discovery shown marked",
+        "last_discovery_at": profile.last_discovery_at
     }

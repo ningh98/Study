@@ -1,0 +1,27 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shell (partial, mostly hidden) -->
+  <ellipse cx="50" cy="75" rx="35" ry="22" fill="#4ade80" stroke="#22c55e" stroke-width="3"/>
+  
+  <!-- Shell pattern -->
+  <circle cx="50" cy="70" r="7" fill="#86efac" opacity="0.6"/>
+  <circle cx="40" cy="76" r="5" fill="#86efac" opacity="0.6"/>
+  <circle cx="60" cy="76" r="5" fill="#86efac" opacity="0.6"/>
+  
+  <!-- Head (peeking out, shy) -->
+  <ellipse cx="50" cy="52" rx="18" ry="16" fill="#4ade80" stroke="#22c55e" stroke-width="2"/>
+  
+  <!-- Eyes (looking down, shy) -->
+  <ellipse cx="44" cy="50" rx="3.5" ry="4" fill="#1f2937"/>
+  <ellipse cx="56" cy="50" rx="3.5" ry="4" fill="#1f2937"/>
+  
+  <!-- Eye highlights -->
+  <circle cx="45" cy="49" r="1.5" fill="white" opacity="0.8"/>
+  <circle cx="57" cy="49" r="1.5" fill="white" opacity="0.8"/>
+  
+  <!-- Blush marks (shy) -->
+  <ellipse cx="38" cy="54" rx="4" ry="2.5" fill="#fca5a5" opacity="0.6"/>
+  <ellipse cx="62" cy="54" rx="4" ry="2.5" fill="#fca5a5" opacity="0.6"/>
+  
+  <!-- Mouth (small timid smile) -->
+  <path d="M 45 57 Q 50 59 55 57" fill="none" stroke="#1f2937" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

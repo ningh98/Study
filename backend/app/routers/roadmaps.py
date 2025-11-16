@@ -1,13 +1,13 @@
 from dotenv import load_dotenv
 import os
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from google  import genai
 import json
 from datetime import datetime
 from pydantic import BaseModel, Field
 from app import models, schema, db
-from typing import List,Optional
+from typing import List, Optional
 from app.routers import knowledge_graph
 
 load_dotenv()
@@ -202,3 +202,170 @@ async def delete_roadmap(roadmap_id: int, db_conn: Session = Depends(db.get_db))
     except Exception as e:
         db_conn.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete roadmap: {str(e)}")
+
+
+class TopicSuggestion(BaseModel):
+    topic: str
+    reason: str
+    suggestion_type: str  # "related", "deep_dive", "adjacent"
+    description: str
+
+class DiscoveryResponse(BaseModel):
+    suggestions: List[TopicSuggestion]
+    completed_topics: List[str]
+    turtle_message: str
+
+
+@router.post("/discover")
+async def discover_topics(
+    user_id: str = "default_user",
+    db_conn: Session = Depends(db.get_db)
+):
+    """
+    AI-powered topic discovery based on completed topics.
+    Analyzes user's learning journey and suggests new topics to explore.
+    
+    Query parameters:
+    - user_id: User identifier (defaults to "default_user")
+    
+    Returns:
+    - 3 curated topic suggestions (related, advanced, adjacent)
+    - Personalized turtle guide message
+    """
+    # Get user's completed topics
+    completed_progress = db_conn.query(models.QuizProgress).filter(
+        models.QuizProgress.user_id == user_id,
+        models.QuizProgress.score == models.QuizProgress.total_questions
+    ).all()
+    
+    if not completed_progress:
+        raise HTTPException(status_code=400, detail="No completed topics yet")
+    
+    # Get completed item details
+    item_ids = [p.roadmap_item_id for p in completed_progress]
+    completed_items = db_conn.query(models.RoadmapItem).filter(
+        models.RoadmapItem.id.in_(item_ids)
+    ).all()
+    
+    # Get roadmap topics
+    roadmap_ids = list(set([item.roadmap_id for item in completed_items]))
+    roadmaps = db_conn.query(models.Roadmap).filter(
+        models.Roadmap.id.in_(roadmap_ids)
+    ).all()
+    
+    # Build completed topics list
+    completed_topics_data = []
+    for item in completed_items:
+        roadmap = next((r for r in roadmaps if r.id == item.roadmap_id), None)
+        if roadmap:
+            completed_topics_data.append({
+                "title": item.title,
+                "roadmap_topic": roadmap.topic,
+                "level": item.level,
+                "summary": item.summary
+            })
+    
+    # Get existing graph connections for context
+    graph_nodes = db_conn.query(models.KnowledgeGraphNode).filter(
+        models.KnowledgeGraphNode.node_type == "title"
+    ).all()
+    
+    graph_edges = db_conn.query(models.KnowledgeGraphEdge).all()
+    
+    # Create AI prompt for discovery
+    discovery_prompt = f"""
+    You are a wise, shy turtle guide helping a learner discover new topics on their learning journey.
+    
+    The learner has completed these topics:
+    {json.dumps(completed_topics_data, indent=2)}
+    
+    Based on their learning journey, suggest 3 NEW topics they should explore:
+    
+    1. RELATED TOPIC: A topic that naturally builds on what they've learned
+    2. DEEP DIVE: An advanced subtopic that expands one of their completed areas
+    3. ADJACENT SKILL: A complementary topic from a related but different domain
+    
+    Consider:
+    - Natural learning progressions
+    - Practical applications
+    - Cross-domain knowledge transfer
+    - What would be most valuable next
+    
+    Also write a brief, encouraging message from the turtle's perspective (shy but helpful personality).
+    
+    Return JSON with this structure:
+    {{
+      "suggestions": [
+        {{
+          "topic": "Topic to learn",
+          "reason": "Why this is a good next step",
+          "suggestion_type": "related|deep_dive|adjacent",
+          "description": "What they'll learn and why it matters"
+        }}
+      ],
+      "turtle_message": "H-hello explorer... I noticed you've been learning about..."
+    }}
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=discovery_prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": {
+                    "type": "object",
+                    "properties": {
+                        "suggestions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "topic": {"type": "string"},
+                                    "reason": {"type": "string"},
+                                    "suggestion_type": {"type": "string"},
+                                    "description": {"type": "string"}
+                                },
+                                "required": ["topic", "reason", "suggestion_type", "description"]
+                            }
+                        },
+                        "turtle_message": {"type": "string"}
+                    },
+                    "required": ["suggestions", "turtle_message"]
+                }
+            }
+        )
+        
+        discovery_data = response.parsed
+        
+        return {
+            "suggestions": discovery_data["suggestions"],
+            "completed_topics": [item["title"] for item in completed_topics_data],
+            "turtle_message": discovery_data["turtle_message"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate suggestions: {str(e)}")
+
+
+@router.post("/accept-suggestion")
+async def accept_suggestion(
+    topic: str = Query(..., description="The suggested topic to generate roadmap for"),
+    experience: str = Query(default="Beginner", description="Experience level"),
+    user_id: str = Query(default="default_user", description="User identifier"),
+    db_conn: Session = Depends(db.get_db)
+):
+    """
+    Accept a suggested topic and generate a full roadmap for it.
+    
+    Query parameters:
+    - topic: The topic to create a roadmap for
+    - experience: User's experience level (default: "Beginner")
+    - user_id: User identifier (defaults to "default_user")
+    
+    Returns:
+    - Generated roadmap with items and questions
+    """
+    # Use existing generate_roadmap logic
+    request = schema.RoadmapCreate(topic=topic, experience=experience)
+    return await generate_roadmap(request, db_conn)

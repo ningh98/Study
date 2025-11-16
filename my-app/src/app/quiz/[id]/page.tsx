@@ -21,6 +21,11 @@ interface CompletionData {
   is_new_unlock: boolean;
   roadmap_item_id: number;
   item_title?: string;
+  next_suggestion?: {
+    id: number;
+    title: string;
+    reason: string;
+  };
 }
 
 export default function QuizPage() {
