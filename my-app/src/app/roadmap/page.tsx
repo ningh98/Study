@@ -299,13 +299,13 @@ const RoadmapPage = () => {
                                 </Card>
                               </DialogTrigger>
 
-                              <DialogContent className="sm:max-w-md">
+                              <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
                                 <DialogHeader>
                                   <DialogTitle className="flex items-center gap-2">
                                     <Flag className="w-5 h-5 text-cyan-600" />
-                                    {item.title}
+                                    <span className="break-words">{item.title}</span>
                                   </DialogTitle>
-                                  <DialogDescription>
+                                  <DialogDescription className="break-words">
                                     {item.summary}
                                   </DialogDescription>
                                 </DialogHeader>
@@ -317,7 +317,16 @@ const RoadmapPage = () => {
                                     </div>
                                     <div className="grid gap-2">
                                       {item.study_material.map((mat, idx) => (
-                                        <div key={idx} className="text-sm text-gray-600 p-2 bg-gray-50 rounded">
+                                        <div 
+                                          key={idx} 
+                                          className="text-sm text-gray-600 p-2 bg-gray-50 rounded"
+                                          style={{ 
+                                            wordBreak: 'break-word',
+                                            overflowWrap: 'break-word',
+                                            wordWrap: 'break-word',
+                                            whiteSpace: 'normal'
+                                          }}
+                                        >
                                           {mat}
                                         </div>
                                       ))}
