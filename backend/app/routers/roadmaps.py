@@ -8,6 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from app import models, schema, db
 from typing import List,Optional
+from app.routers import knowledge_graph
 
 load_dotenv()
 
@@ -90,9 +91,6 @@ async def generate_roadmap(request: schema.RoadmapCreate, db_conn: Session = Dep
     db_conn.commit()
     db_conn.refresh(db_roadmap)
     
-    # Invalidate knowledge graph cache since we're adding new data
-    db_conn.query(models.KnowledgeGraphCache).delete()
-    
     for item_data in roadmap_data["items"]:
         # Create roadmap item
         db_item = models.RoadmapItem(
@@ -116,6 +114,9 @@ async def generate_roadmap(request: schema.RoadmapCreate, db_conn: Session = Dep
             db_conn.add(db_question)
     
     db_conn.commit()
+    
+    # Incrementally add this roadmap to the knowledge graph
+    await knowledge_graph.add_roadmap_to_graph(db_roadmap.id, db_conn)
     
     return {
         "id": db_roadmap.id,
@@ -186,11 +187,11 @@ async def delete_roadmap(roadmap_id: int, db_conn: Session = Depends(db.get_db))
         # Delete the roadmap itself
         db_conn.delete(roadmap)
         
-        # Invalidate knowledge graph cache since we're removing data
-        db_conn.query(models.KnowledgeGraphCache).delete()
-        
         # Commit all changes
         db_conn.commit()
+        
+        # Incrementally remove this roadmap from the knowledge graph
+        await knowledge_graph.remove_roadmap_from_graph(roadmap_id, db_conn)
         
         return {"message": f"Roadmap {roadmap_id} successfully deleted"}
     

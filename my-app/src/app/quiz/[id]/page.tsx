@@ -44,6 +44,35 @@ export default function QuizPage() {
       });
   }, [id]);
 
+  // Save progress when quiz is completed
+  useEffect(() => {
+    if (isComplete && quizData) {
+      const questions = quizData?.questions || [];
+      const isPerfectScore = score === questions.length;
+      
+      if (isPerfectScore) {
+        // Save completion to backend
+        fetch('http://localhost:8000/api/progress/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roadmap_item_id: parseInt(id),
+            score: score,
+            total_questions: questions.length,
+            user_id: 'default_user'
+          })
+        })
+          .then(res => res.json())
+          .then(data => {
+            console.log('Progress saved:', data);
+          })
+          .catch(err => {
+            console.error('Error saving progress:', err);
+          });
+      }
+    }
+  }, [isComplete, score, id, quizData]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

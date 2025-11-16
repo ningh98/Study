@@ -18,7 +18,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from 'react';
 import { roadmapItems } from "@/lib/data";
-import { House } from "lucide-react";
+import { House, Lock, CheckCircle } from "lucide-react";
 
 interface RoadmapItem {
   id: number;
@@ -39,17 +39,43 @@ const RoadmapPage = () => {
 
   const [roadmaps, setRoadmaps] = useState<Roadmap[]>();
   const [loading, setLoading] = useState(true);
+  const [completedIds, setCompletedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
+    // Fetch roadmaps
     fetch('http://localhost:8000/api/roadmaps/')
       .then(res => res.json())
       .then(data => {
         setRoadmaps(data);
         setLoading(false);
       });
+
+    // Fetch progress/unlocked items
+    fetch('http://localhost:8000/api/progress/unlocked?user_id=default_user')
+      .then(res => res.json())
+      .then(data => {
+        setCompletedIds(new Set(data.unlocked_ids));
+      })
+      .catch(err => {
+        console.error('Error fetching progress:', err);
+      });
   }, []);
 
   if (loading) return <div>Loading roadmaps...</div>;
+
+  // Check if a level is unlocked for a roadmap
+  const isLevelUnlocked = (roadmap: Roadmap, level: number): boolean => {
+    if (level === 1) return true; // Level 1 always unlocked
+    
+    // Check if all items from previous level are complete
+    const prevLevelItems = roadmap.items.filter(item => item.level === level - 1);
+    return prevLevelItems.every(item => completedIds.has(item.id));
+  };
+
+  // Check if item is completed
+  const isItemCompleted = (itemId: number): boolean => {
+    return completedIds.has(itemId);
+  };
 
   const handleDeleteRoadmap = async (roadmapId: number) => {
   if (!confirm(`Are you sure you want to delete this roadmap?`)) {
@@ -111,40 +137,56 @@ const RoadmapPage = () => {
                 variant='destructive'>delete</Button>
               </div>
               
-              {roadmap.items.map(item =>(
-                <Dialog key={item.title}>
-                <DialogTrigger asChild>
-                    <Card className="overflow-hidden w-80 cursor-pointer">
-                        <CardHeader className="flex flex-row items-start justify-between gap-2">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                            {item.title}
-                            <Badge variant="secondary">Level {item.level}</Badge>
-                            </CardTitle>
-                        </div>
-                        {/* <Badge
-                            variant={
-                            item.status === "done"
-                                ? "default"
-                                : item.status === "in_progress"
-                                ? "secondary"
-                                : "outline"
-                            }
-                        >
-                            {item.status.replace("_", " ")}
-                        </Badge> */}
-                        </CardHeader>
+              {roadmap.items.map(item => {
+                const isCompleted = isItemCompleted(item.id);
+                const isUnlocked = isLevelUnlocked(roadmap, item.level);
+                const isLocked = !isUnlocked;
 
-                        <Separator />
-                            {/* <CardContent className="py-1">
-                            <div className="mb-2 text-sm text-muted-foreground">
-                                Progress
-                            </div>
-                            <Progress value={it.progress ?? (it.status === "done" ? 100 : 0)} />
-                            </CardContent> */}
+                return (
+                <Dialog key={item.id}>
+                {isLocked ? (
+                  // Render card without trigger for locked items
+                  <Card className={`overflow-hidden w-80 relative transition-all opacity-50 cursor-not-allowed bg-gray-100 pointer-events-none`}>
+                      <CardHeader className="flex flex-row items-start justify-between gap-2">
+                      <div className="flex-1">
+                          <CardTitle className="flex items-center gap-2">
+                          {item.title}
+                          <Badge variant="secondary">Level {item.level}</Badge>
+                          </CardTitle>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Lock className="w-5 h-5 text-gray-500" />
+                      </div>
+                      </CardHeader>
 
-                    </Card>
-                </DialogTrigger>
+                      <Separator />
+
+                  </Card>
+                ) : (
+                  // Render interactive card for unlocked items
+                  <DialogTrigger asChild>
+                      <Card className={`overflow-hidden w-80 relative transition-all ${
+                        isCompleted
+                          ? 'border-green-500 border-2 bg-green-50 cursor-pointer'
+                          : 'cursor-pointer hover:shadow-md'
+                      }`}>
+                          <CardHeader className="flex flex-row items-start justify-between gap-2">
+                          <div className="flex-1">
+                              <CardTitle className="flex items-center gap-2">
+                              {item.title}
+                              <Badge variant="secondary">Level {item.level}</Badge>
+                              </CardTitle>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {isCompleted && <CheckCircle className="w-5 h-5 text-green-500" />}
+                          </div>
+                          </CardHeader>
+
+                          <Separator />
+
+                      </Card>
+                  </DialogTrigger>
+                )}
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>{item.title}</DialogTitle>
@@ -180,7 +222,8 @@ const RoadmapPage = () => {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-              ))}
+              );
+              })}
               
             </div>
           );

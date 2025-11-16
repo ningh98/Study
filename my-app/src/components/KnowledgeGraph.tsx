@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 import ForceGraph2D from 'react-force-graph-2d';
 import { useRef, useEffect } from 'react';
@@ -24,10 +25,12 @@ interface GraphData {
 
 interface KnowledgeGraphProps {
   graphData: GraphData | null;
+  unlockedIds: Set<number>;
 }
 
-const KnowledgeGraph = ({ graphData }: KnowledgeGraphProps) => {
-  const fgRef = useRef<any>();
+const KnowledgeGraph = ({ graphData, unlockedIds }: KnowledgeGraphProps) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null);
 
   // Colors for different groups (roadmaps)
   const groupColors = [
@@ -40,6 +43,39 @@ const KnowledgeGraph = ({ graphData }: KnowledgeGraphProps) => {
     '#F97316', // Orange-red
     '#84CC16', // Lime
   ];
+
+  // Helper function to extract roadmap_item_id from node id
+  const getItemIdFromNode = (nodeId: string): number | null => {
+    if (nodeId.startsWith('title_')) {
+      return parseInt(nodeId.replace('title_', ''));
+    }
+    return null;
+  };
+
+  // Check if a node is unlocked
+  const isNodeUnlocked = (node: Node): boolean => {
+    if (node.type === 'topic') return true; // Topics always visible
+    const itemId = getItemIdFromNode(node.id);
+    return itemId ? unlockedIds.has(itemId) : false;
+  };
+
+  // Check if a topic is complete (all its title children are unlocked)
+  const isTopicComplete = (topicId: string): boolean => {
+    if (!graphData) return false;
+    
+    // Find all title nodes that belong to this topic (connected by "contains" relationship)
+    const childTitles = graphData.edges
+      .filter(edge => edge.source === topicId && edge.relationship === 'contains')
+      .map(edge => graphData.nodes.find(n => n.id === edge.target))
+      .filter((n): n is Node => n !== undefined);
+    
+    if (childTitles.length === 0) return false;
+    
+    return childTitles.every(child => {
+      const itemId = getItemIdFromNode(child.id);
+      return itemId ? unlockedIds.has(itemId) : false;
+    });
+  };
 
   useEffect(() => {
     // Zoom to fit when data changes
@@ -62,21 +98,33 @@ const KnowledgeGraph = ({ graphData }: KnowledgeGraphProps) => {
     );
   }
 
-  // Transform data for react-force-graph-2d
+  // Transform data for react-force-graph-2d with fog of war
   const transformedData = {
     nodes: graphData.nodes.map(node => ({
       id: node.id,
       label: node.label,
       type: node.type,
       group: node.group || 0,
-      roadmap_id: node.roadmap_id
+      roadmap_id: node.roadmap_id,
+      unlocked: isNodeUnlocked(node),
+      topicComplete: node.type === 'topic' ? isTopicComplete(node.id) : false
     })),
-    links: graphData.edges.map(edge => ({
-      source: edge.source,
-      target: edge.target,
-      value: edge.weight,
-      relationship: edge.relationship
-    }))
+    links: graphData.edges
+      .filter(edge => {
+        // Filter out links where either endpoint is locked
+        const sourceNode = graphData.nodes.find(n => n.id === edge.source);
+        const targetNode = graphData.nodes.find(n => n.id === edge.target);
+        
+        if (!sourceNode || !targetNode) return false;
+        
+        return isNodeUnlocked(sourceNode) && isNodeUnlocked(targetNode);
+      })
+      .map(edge => ({
+        source: edge.source,
+        target: edge.target,
+        value: edge.weight,
+        relationship: edge.relationship
+      }))
   };
 
   return (
@@ -111,18 +159,67 @@ const KnowledgeGraph = ({ graphData }: KnowledgeGraphProps) => {
           height={700}
           backgroundColor="#f8f9fa"
 
-          // Node styling
+          // Node styling with fog of war
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           nodeColor={(node: any) => {
+            // Locked title nodes - gray/faded
+            if (node.type === 'title' && !node.unlocked) {
+              return '#9CA3AF'; // Gray for locked
+            }
+            
+            // Topic nodes - show completion status
+            if (node.type === 'topic') {
+              if (node.topicComplete) {
+                return '#10B981'; // Green for completed topics
+              }
+              // Otherwise use group color but it means incomplete
+            }
+            
+            // Unlocked nodes use normal group color
             const group = node.group || 0;
             return groupColors[group % groupColors.length];
           }}
           nodeVal={(node: any) => node.type === 'topic' ? 8 : 4} // Size based on type
           nodeLabel={(node: any) => {
             const type = node.type === 'topic' ? 'TOPIC' : 'TITLE';
+            const status = node.type === 'topic' 
+              ? (node.topicComplete ? ' ✓ (Complete)' : ' (In Progress)')
+              : (node.unlocked ? ' ✓' : ' 🔒 (Locked)');
+            
             return `<div style="background: rgba(255,255,255,0.9); padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
-              <strong style="color: #333;">${node.label}</strong><br/>
+              <strong style="color: #333;">${node.label}${status}</strong><br/>
               <small style="color: #666;">${type}</small>
             </div>`;
+          }}
+          nodeCanvasObject={(node: any, ctx: any, globalScale: number) => {
+            // Custom rendering for locked nodes - add opacity
+            const label = node.label;
+            const fontSize = 12/globalScale;
+            ctx.font = `${fontSize}px Sans-Serif`;
+            
+            // Draw node circle
+            const radius = node.type === 'topic' ? 8 : 4;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+            
+            // Apply opacity for locked nodes
+            if (node.type === 'title' && !node.unlocked) {
+              ctx.globalAlpha = 0.3;
+            } else {
+              ctx.globalAlpha = 1.0;
+            }
+            
+            ctx.fillStyle = node.color || '#cccccc';
+            ctx.fill();
+            
+            // Draw border for completed topics
+            if (node.type === 'topic' && node.topicComplete) {
+              ctx.strokeStyle = '#059669'; // Darker green
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
+            
+            ctx.globalAlpha = 1.0; // Reset opacity
           }}
 
           // Link styling
@@ -170,10 +267,6 @@ const KnowledgeGraph = ({ graphData }: KnowledgeGraphProps) => {
           }}
 
           enableNodeDrag={true}
-          enablePanAndZoom={true}
-
-          minZoom={0.1}
-          maxZoom={5}
         />
       </div>
 

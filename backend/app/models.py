@@ -32,11 +32,32 @@ class QuizQuestion(Base):
     options = Column(String)  # JSON string
     correct = Column(Integer)
 
-class KnowledgeGraphCache(Base):
-    __tablename__ = "knowledge_graph_cache"
+class KnowledgeGraphNode(Base):
+    __tablename__ = "knowledge_graph_nodes"
+    
+    id = Column(String, primary_key=True)  # e.g., "topic_1" or "title_5"
+    label = Column(String)
+    node_type = Column(String)  # "topic" or "title"
+    roadmap_id = Column(Integer, index=True)
+    group = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class KnowledgeGraphEdge(Base):
+    __tablename__ = "knowledge_graph_edges"
     
     id = Column(Integer, primary_key=True, index=True)
-    data_hash = Column(String, unique=True, index=True)  # Hash of source data
-    graph_data = Column(Text)  # JSON string of nodes and edges
+    source = Column(String, index=True)
+    target = Column(String, index=True)
+    weight = Column(Float, default=1.0)
+    relationship = Column(String, default="related")
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class QuizProgress(Base):
+    __tablename__ = "quiz_progress"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True, default="default_user")
+    roadmap_item_id = Column(Integer, index=True)
+    completed_at = Column(DateTime, default=datetime.utcnow)
+    score = Column(Integer)
+    total_questions = Column(Integer)

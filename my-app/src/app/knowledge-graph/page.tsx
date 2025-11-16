@@ -28,17 +28,27 @@ const KnowledgeGraphPage = () => {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unlockedIds, setUnlockedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const fetchGraphData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:8000/api/knowledge-graph/');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        
+        // Fetch graph data
+        const graphResponse = await fetch('http://localhost:8000/api/knowledge-graph/');
+        if (!graphResponse.ok) {
+          throw new Error(`HTTP error! status: ${graphResponse.status}`);
         }
-        const data = await response.json();
-        setGraphData(data);
+        const graphData = await graphResponse.json();
+        setGraphData(graphData);
+
+        // Fetch unlocked progress
+        const progressResponse = await fetch('http://localhost:8000/api/progress/unlocked?user_id=default_user');
+        if (progressResponse.ok) {
+          const progressData = await progressResponse.json();
+          setUnlockedIds(new Set(progressData.unlocked_ids));
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load knowledge graph');
       } finally {
@@ -91,7 +101,7 @@ const KnowledgeGraphPage = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">
-          <KnowledgeGraph graphData={graphData} />
+          <KnowledgeGraph graphData={graphData} unlockedIds={unlockedIds} />
         </div>
       </div>
     </div>

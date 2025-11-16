@@ -52,3 +52,7 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+
+
+INCREMENTAL_GRAPH_UPDATES.md
+GAMIFICATION_FEATURES.md
